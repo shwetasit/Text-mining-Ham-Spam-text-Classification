@@ -1,0 +1,325 @@
+#!/usr/bin/env python2
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Aug 14 15:57:53 2018
+
+@author: shwetasaloni
+
+Reference
+confusion matrix http://scikit-learn.org/stable/auto_examples/model_selection/plot_confusion_matrix.html#sphx-glr-auto-examples-model-selection-plot-confusion-matrix-py
+classification table https://stackoverflow.com/questions/28200786/how-to-plot-scikit-learn-classification-report?noredirect=1&lq=1
+plot feature importance http://scikit-learn.org/stable/auto_examples/ensemble/plot_forest_importances.html
+"""
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+
+df=pd.read_csv('/Users/shwetasaloni/Downloads/spam.csv', encoding = 'Latin-1')
+df.info()
+df.shape
+
+df1= df.drop(['Unnamed: 2', 'Unnamed: 3', 'Unnamed: 4'], axis=1)
+df2=df1.rename(columns={'v1': 'Label', 'v2': 'Text'})
+df1.v1.value_counts()   #ham     4825
+                        #spam     747
+
+from sklearn.preprocessing import LabelEncoder
+
+le=LabelEncoder()
+
+le.fit(df2['Label'])
+
+df2['Label']=le.transform(df2['Label']) # Change label to 0 or 1
+
+df2.Label.value_counts() #  0    4825
+                         #  1     747
+#DATA PARTITION
+from sklearn.model_selection import train_test_split
+
+train, test= train_test_split(df2, test_size = 0.3, random_state = 42, shuffle=True, stratify = df2.Label)
+
+X_train=train.Text
+X_test = test.Text
+y_train = train.Label
+y_test = test.Label
+
+
+train_ham=train.loc[train.Label == 0]
+train_spam = train.loc[train.Label == 1]
+
+# TOKENIZATION AND REMOVING PUNCTUATION
+
+from nltk.corpus import stopwords
+from nltk.tokenize import RegexpTokenizer 
+tokenizer = RegexpTokenizer(r'\w+') #tokenize words while removing punctuations
+from nltk.stem import WordNetLemmatizer 
+lemmatizer = WordNetLemmatizer() #to combine words of same lemma 
+
+# TOKENIZE AND LEMMITIZE HAM TEXTS
+hamword=[]
+
+for i in train_ham.Text:
+    words=i.lower()
+    words = tokenizer.tokenize(words)
+    for j in words:
+        if j not in stopwords.words('english'):
+            if not j.isdigit():
+                j=lemmatizer.lemmatize(j)
+                hamword.append(j)
+
+# TOKENIZE AND LEMMITIZE SPAM TEXTS            
+spamword=[]
+for i in train_spam.Text:
+    words = i.lower()
+    words=tokenizer.tokenize(words)
+    for j in words:
+        if j not in stopwords.words('english'):
+            if not j.isdigit():
+                j= lemmatizer.lemmatize(j)
+                spamword.append(j)
+
+    
+from collections import Counter
+#MOST COMMON HAM TEXTS
+Counter(hamword).most_common(10)
+
+#MOST COMMON SPAM TEXTS
+Counter(spamword).most_common(10)
+
+# using vectorizer from sklearn.feature_extraction to convert X_train and X_test to Compressed Sparse matrix
+from sklearn.feature_extraction.text import TfidfVectorizer
+vectorizer = TfidfVectorizer(stop_words = 'english', lowercase = True, use_idf = True)
+
+Xtrain=vectorizer.fit_transform(X_train)
+Xtest=vectorizer.transform(X_test)
+Xtrain.shape
+Xtest.shape
+
+# MODEL BUILDING
+from sklearn.naive_bayes import MultinomialNB
+
+nb=MultinomialNB()
+nb.fit(Xtrain, y_train)
+nb_pred= nb.predict(Xtest)
+nb_pred_prob =nb.predict_proba(Xtest)
+
+#MODEL COMPARISION
+from sklearn.metrics import accuracy_score, confusion_matrix, classification_report, roc_auc_score
+#ACCURACY
+print('Accuracy: ', accuracy_score(y_test, nb_pred))
+
+#CONFUSION MATRIX
+print('Confusion Matrix:' )
+
+
+import itertools
+def plot_confusion_matrix(cm, classes,
+                          normalize=False,
+                          title='Confusion matrix',
+                          cmap=plt.cm.Blues):
+    print('Confusion matrix, without normalization')
+    print(cm)
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+    plt.colorbar()
+    tick_marks = np.arange(len(classes))
+    plt.xticks(tick_marks, classes, rotation=45)
+    plt.yticks(tick_marks, classes)
+
+    fmt = 'd'
+    thresh = cm.max() / 2.
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        plt.text(j, i, format(cm[i, j], fmt),
+                 horizontalalignment="center",
+                 color="white" if cm[i, j] > thresh else "black")
+    plt.tight_layout()
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+plt.figure()
+plot_confusion_matrix(confusion_matrix(y_test,nb_pred), classes=['0', '1'], normalize=False,
+                      title='Normalized confusion matrix')
+plt.show()
+
+
+# AUC SCORE
+
+print ("AUC Score : %f", roc_auc_score(y_test, nb_pred_prob[:,1]))
+
+#CLASSIFICATION TABLE
+def plot_classification_report(cr, title='Classification Report', with_avg_total = False, cmap = plt.cm.Reds):
+    lines = cr.split('\n')
+    classes=[]
+    plotMat=[]
+    for lines in lines[2: (len(lines)-3)]:
+        t=lines.split()
+        classes.append(t[0])
+        v=[float(x) for x in t[1: len(t)-1]]
+        print v
+        plotMat.append(v)
+    if with_avg_total:
+        aveTotal = lines[len(lines)-1].split()
+        classes.append('avg/total')
+        vAveTotal = [float(x) for x in t[1: len(aveTotal)-1]]
+        plotMat.append(vAveTotal)
+    plt.imshow(plotMat, interpolation = 'nearest', cmap=cmap)
+    plt.title(title) 
+    plt.colorbar()
+    x_tick_marks = np.arange(3)
+    y_tick_marks = np.arange(len(classes))
+    plt.xticks(x_tick_marks, ['precision', 'recall', 'f1-score'], rotation = 45)
+    plt.yticks(y_tick_marks, classes)
+    plt.tight_layout()
+    plt.ylabel('Classes')
+    plt.xlabel('Measures')
+    
+print(classification_report(y_test, nb_pred, labels=['0', '1']))
+
+plot_classification_report(classification_report(y_test, nb_pred, labels=['0', '1']))
+
+#CLASS RATIO
+print("ham vs spam =",Counter(y_train)[0]/Counter(y_train)[1])
+
+#define a function for performance metrics
+def model_eval(model,Xtest,y_test):
+    pred = model.predict(Xtest)
+    if not str(model)[:3] == "SGD":
+        pred_proba = model.predict_proba(Xtest)
+        pred_proba_c1 = pred_proba[:,1]
+        print ("AUC Score : %f" % roc_auc_score(y_test, pred_proba_c1))
+    print ("prediciton Accuracy : %f" % accuracy_score(y_test, pred))
+    print ("Confusion_matrix : ")
+    print (confusion_matrix(y_test,pred))
+    print ("classification report : ")
+    print (classification_report(y_test, pred, labels=['0', '1']))
+    
+    
+
+
+# LOGISTIC REGRESSION WITH CROSS VALIDATION
+from sklearn.linear_model import LogisticRegressionCV
+
+lr=LogisticRegressionCV(solver='liblinear', penalty='l2', class_weight='balanced')
+lr.fit(Xtrain, y_train)
+model_eval(lr, Xtest, y_test)
+
+
+#RANDOM FOREST CLASSIFIER
+
+from sklearn.ensemble import RandomForestClassifier
+   
+randF=RandomForestClassifier(n_estimators=100, max_features='sqrt', bootstrap=True,
+                             class_weight='balanced', random_state=42,max_depth = 40)
+randF.fit(Xtrain, y_train)
+randF.oob_score
+
+print("RF.oob_score : %f" % randF.oob_score)#Whether to use out-of-bag samples to estimate the generalization accuracy.
+
+model_eval(randF, Xtest, y_test)
+
+#GRADIENT BOOSTING CLASSIFIER
+from sklearn.ensemble import GradientBoostingClassifier
+gbc=GradientBoostingClassifier(n_estimators=100, max_features ='auto', learning_rate= 0.25,
+                               max_depth=100, subsample=0.8, random_state=42)
+
+#to create sample weight array
+sample_weights = [0.15 if x==0 else 0.85 for x in y_train]
+
+gbc.fit(Xtrain,y_train, sample_weight = sample_weights, monitor = None)
+model_eval(gbc, Xtest,y_test)
+
+#SGD CLASSIFIER
+from sklearn.linear_model import SGDClassifier
+sgd=SGDClassifier(loss='hinge', penalty='l2', alpha = 0.0001, fit_intercept =True,  shuffle=True, 
+                  learning_rate='optimal', n_iter =np.ceil(10**(6 / Xtrain.shape[1])))
+sgd.fit(Xtrain, y_train)
+model_eval(sgd, Xtest,y_test)
+
+#MODEL SELECTION
+# choosing GBC since it classifies all teh spam messages as spam.
+
+from sklearn.model_selection import GridSearchCV
+# 1st choosing teh best n_estimators
+
+param_test1={'n_estimators': range(50,151, 10)}
+gsearch1 = GridSearchCV(estimator=GradientBoostingClassifier(learning_rate=0.1, min_samples_leaf =10, max_depth=100,
+                                                             max_features='auto', subsample=0.8, random_state=42),
+                        param_grid=param_test1, scoring ='roc_auc', iid = False, cv=5)
+gsearch1.fit(Xtrain, y_train)
+gsearch1.grid_scores_, gsearch1.best_params_, gsearch1.best_score_
+
+# based on the best n_estimator, searching for best max_depth
+
+param_test2={'max_depth': range(15,51, 5)}
+gsearch2 = GridSearchCV(estimator=GradientBoostingClassifier(learning_rate=0.1,n_estimators=130, min_samples_leaf =10,
+                                                             max_features='auto', subsample=0.8, random_state=42),
+                        param_grid=param_test2, scoring ='roc_auc', iid = False, cv=5)
+gsearch2.fit(Xtrain, y_train)
+gsearch2.grid_scores_, gsearch2.best_params_, gsearch2.best_score_
+
+# min_samples_split and min_samples_leaf since these two parameters are related
+
+param_test3={'min_samples_split': range(100,301,50), 'min_samples_leaf':range(3, 24, 10)}
+gsearch3 = GridSearchCV(estimator=GradientBoostingClassifier(learning_rate=0.1,n_estimators=130, max_depth=50,
+                                                             max_features='auto', subsample=0.8, random_state=42),
+                        param_grid=param_test3, scoring ='roc_auc', iid = False, cv=5)
+gsearch3.fit(Xtrain, y_train)
+gsearch3.grid_scores_, gsearch3.best_params_, gsearch3.best_score_
+
+#max_features
+param_test4={'max_features': range(40,131,10)}
+
+gsearch4 = GridSearchCV(estimator=GradientBoostingClassifier(learning_rate=0.1,n_estimators=130, max_depth=50,
+                                                             min_samples_split= 150, min_samples_leaf=3, max_features='auto', subsample=0.8, random_state=42),
+                        param_grid=param_test4, scoring ='roc_auc', iid = False, cv=5)
+gsearch4.fit(Xtrain, y_train)
+gsearch4.grid_scores_, gsearch4.best_params_, gsearch4.best_score_
+
+#subsample
+param_test5={'subsample': [0.6,0.7,0.75,0.8,0.85,0.9]}
+gsearch5 = GridSearchCV(estimator=GradientBoostingClassifier(learning_rate=0.1,n_estimators=130, max_depth=50,
+                                                             max_features='auto', subsample=0.8, random_state=42),
+                        param_grid=param_test5, scoring ='roc_auc', iid = False, cv=5)
+gsearch5.fit(Xtrain, y_train)
+gsearch5.grid_scores_, gsearch5.best_params_, gsearch5.best_score_
+
+
+
+#FINAL MODEL
+
+finalGBC=GradientBoostingClassifier(learning_rate =0.5, n_estimators=260, max_depth=50, min_samples_leaf=3, 
+                                    min_samples_split=100, subsample=0.9, random_state=42)
+sample_weights=[0.15 if x==0 else 0.85 for x in y_train]
+
+finalGBC.fit(Xtrain, y_train, sample_weight=sample_weights)
+model_eval(finalGBC, Xtest, y_test)
+
+
+
+# top 10 feature importance
+importances = finalGBC.feature_importances_
+std = np.std([finalGBC.feature_importances_ for tree in finalGBC.estimators_],axis=0)
+
+# top 10 indices
+indices = np.argsort(importances)[::-1][0:10]
+feature_names= vectorizer.get_feature_names()
+print('Top 10 Words:')
+for i in range(10):
+    print(indices[i], feature_names[indices[i]])
+
+plt.figure()
+plt.title('Feature Importance')
+plt.bar(range(10), importances[indices], color='r', yerr=std[indices], align='center')
+plt.xticks(range(10), indices)
+plt.xlim([-1,10])
+plt.show()
+
+
+
+
+
+
+
+
+
+
