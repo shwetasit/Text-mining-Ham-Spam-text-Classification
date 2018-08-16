@@ -5,7 +5,8 @@ Created on Tue Aug 14 15:57:53 2018
 
 @author: shwetasaloni
 
-Reference
+Reference:
+https://www.kaggle.com/allenwth7/text-mining/notebook?scriptVersionId=2857711
 confusion matrix http://scikit-learn.org/stable/auto_examples/model_selection/plot_confusion_matrix.html#sphx-glr-auto-examples-model-selection-plot-confusion-matrix-py
 classification table https://stackoverflow.com/questions/28200786/how-to-plot-scikit-learn-classification-report?noredirect=1&lq=1
 plot feature importance http://scikit-learn.org/stable/auto_examples/ensemble/plot_forest_importances.html
